@@ -18,6 +18,7 @@ export default auth((req) => {
       ts: new Date().toISOString(),
     }),
   );
+  const isRootRoute = pathname === "/";
 
   const isLoggedIn = !!req.auth?.user;
   const isAuthRoute =
@@ -32,7 +33,12 @@ export default auth((req) => {
     res.headers.set("x-correlation-id", correlationId);
     return res;
   }
-
+  if (isRootRoute) {
+    const target = isLoggedIn ? "/dashboard" : "/login";
+    return withCorrelationId(
+      NextResponse.redirect(new URL(target, req.nextUrl.origin)),
+    );
+  }
   if (isAuthRoute) {
     if (isLoggedIn && (pathname === "/login" || pathname === "/register")) {
       return withCorrelationId(
