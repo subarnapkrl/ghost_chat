@@ -1,26 +1,257 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ==========================================================================
+   ZOMBIE PROTOCOL THEME (Default Dark / High Contrast Terminal)
+   ========================================================================== */
+:root {
+  /* Pitch Black Void Background & Decayed Green-White Text */
+  --background: oklch(0.12 0.015 140);
+  --foreground: oklch(0.9 0.03 135);
+
+  /* Dark Military Terminal Cards & Popovers */
+  --card: oklch(0.16 0.02 140);
+  --card-foreground: oklch(0.9 0.03 135);
+  --popover: oklch(0.15 0.02 140);
+  --popover-foreground: oklch(0.9 0.03 135);
+
+  /* Primary: Radioactive Neon Slime Green */
+  --primary: oklch(0.75 0.22 135);
+  --primary-foreground: oklch(0.12 0.02 140);
+
+  /* Secondary: Dark Tactical Steel */
+  --secondary: oklch(0.22 0.02 140);
+  --secondary-foreground: oklch(0.85 0.03 135);
+
+  /* Muted Elements: Ash & Decay */
+  --muted: oklch(0.2 0.015 140);
+  --muted-foreground: oklch(0.6 0.03 135);
+
+  /* Accent: Biohazard Glow Tint */
+  --accent: oklch(0.24 0.04 135);
+  --accent-foreground: oklch(0.85 0.15 135);
+
+  /* Destructive: Dried Blood / Infected Red */
+  --destructive: oklch(0.58 0.23 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  /* Borders, Inputs, Focus Rings */
+  --border: oklch(0.28 0.04 135 / 40%);
+  --input: oklch(0.22 0.02 140);
+  --ring: oklch(0.75 0.22 135);
+
+  /* Tactical Geometry */
+  --radius: 0.25rem;
+
+  /* Sidebar Protocol Styling */
+  --sidebar: oklch(0.14 0.018 140);
+  --sidebar-foreground: oklch(0.9 0.03 135);
+  --sidebar-primary: oklch(0.75 0.22 135);
+  --sidebar-primary-foreground: oklch(0.12 0.02 140);
+  --sidebar-accent: oklch(0.2 0.035 135);
+  --sidebar-accent-foreground: oklch(0.9 0.03 135);
+  --sidebar-border: oklch(0.28 0.04 135 / 30%);
+  --sidebar-ring: oklch(0.75 0.22 135);
+
+  /* Tactical HUD Charts */
+  --chart-1: oklch(0.75 0.22 135); /* Bio-Green */
+  --chart-2: oklch(0.58 0.23 25); /* Blood-Red */
+  --chart-3: oklch(0.78 0.18 80); /* Hazard-Yellow */
+  --chart-4: oklch(0.6 0.15 230); /* Cyber-Blue */
+  --chart-5: oklch(0.5 0.03 140); /* Sludge-Gray */
+}
+
+/* Dark mode matches root for protocol consistency */
+.dark {
+  --background: oklch(0.12 0.015 140);
+  --foreground: oklch(0.9 0.03 135);
+  --card: oklch(0.16 0.02 140);
+  --card-foreground: oklch(0.9 0.03 135);
+  --popover: oklch(0.15 0.02 140);
+  --popover-foreground: oklch(0.9 0.03 135);
+  --primary: oklch(0.75 0.22 135);
+  --primary-foreground: oklch(0.12 0.02 140);
+  --secondary: oklch(0.22 0.02 140);
+  --secondary-foreground: oklch(0.85 0.03 135);
+  --muted: oklch(0.2 0.015 140);
+  --muted-foreground: oklch(0.6 0.03 135);
+  --accent: oklch(0.24 0.04 135);
+  --accent-foreground: oklch(0.85 0.15 135);
+  --destructive: oklch(0.58 0.23 25);
+  --border: oklch(0.28 0.04 135 / 40%);
+  --input: oklch(0.22 0.02 140);
+  --ring: oklch(0.75 0.22 135);
+  --sidebar: oklch(0.14 0.018 140);
+  --sidebar-foreground: oklch(0.9 0.03 135);
+  --sidebar-primary: oklch(0.75 0.22 135);
+  --sidebar-primary-foreground: oklch(0.12 0.02 140);
+  --sidebar-accent: oklch(0.2 0.035 135);
+  --sidebar-accent-foreground: oklch(0.9 0.03 135);
+  --sidebar-border: oklch(0.28 0.04 135 / 30%);
+  --sidebar-ring: oklch(0.75 0.22 135);
+}
+
+/* ==========================================================================
+   BASE & UTILITY OVERRIDES
+   ========================================================================== */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground selection:bg-primary/30 selection:text-primary;
+  }
+  html {
+    @apply font-mono antialiased;
+  }
+}
+@keyframes bubble-dissolve {
+  0% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(3px);
+    transform: scale(0.94);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.bubble-dissolving {
+  animation: bubble-dissolve 650ms ease-in forwards;
+}
+
+@keyframes particle-burst {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0.25) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+.burst-particle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  pointer-events: none;
+  animation: particle-burst 650ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+/* Day 5: loading skeletons */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.skeleton-bar {
+  background: var(--slate-panel-2);
+  border-radius: 3px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* Day 5: new message entrance */
+@keyframes message-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-entering {
+  animation: message-fade-in 300ms ease-out;
+}
+
+@keyframes ghost-float {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate(25px, -35px) rotate(6deg) scale(1.05);
+  }
+  50% {
+    transform: translate(-20px, -60px) rotate(-4deg) scale(0.95);
+  }
+  75% {
+    transform: translate(-35px, -25px) rotate(8deg) scale(1.02);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+.animate-ghost-float {
+  animation: ghost-float infinite ease-in-out;
+}
+
+@keyframes ghost-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
