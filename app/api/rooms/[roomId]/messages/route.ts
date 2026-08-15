@@ -11,6 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "../../../../../auth";
 import { getIO } from "../../../../../lib/socket-server";
 import { checkMessageRateLimit } from "../../../../../lib/rate-limit";
+import { withLogging } from "../../../../../lib/with-logging";
+import { isSameOrigin } from "../../../../../lib/csrf";
+import { isBodyTooLarge } from "../../../../../lib/request-limits";
 
 export const runtime = "nodejs";
 
@@ -54,204 +57,225 @@ async function requireMembership(userId: string, roomId: string) {
   return !!membership;
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ roomId: string }> },
-) {
-  const { roomId } = await params;
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  if (!(await requireMembership(session.user.id, roomId))) {
-    return NextResponse.json(
-      { error: "Not a member of this room" },
-      { status: 403 },
-    );
-  }
-
-  const url = new URL(req.url);
-  const limitParam = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(limitParam)
-    ? Math.min(Math.max(Math.trunc(limitParam), 1), MAX_PAGE_SIZE)
-    : DEFAULT_PAGE_SIZE;
-
-  const cursorParam = url.searchParams.get("cursor");
-  let cursor: Cursor | null = null;
-  if (cursorParam) {
-    cursor = decodeCursor(cursorParam);
-    if (!cursor) {
-      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+export const GET = withLogging<{ roomId: string }>(
+  "messages.list",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ roomId: string }> },
+  ) => {
+    const { roomId } = await params;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
-  }
 
-  const conditions = [eq(messages.roomId, roomId)];
-  if (cursor) {
-    const cursorDate = new Date(cursor.createdAt);
-    conditions.push(
-      or(
-        lt(messages.createdAt, cursorDate),
-        and(eq(messages.createdAt, cursorDate), lt(messages.id, cursor.id)),
-      )!,
-    );
-  }
-
-  const rows = await db
-    .select({
-      id: messages.id,
-      roomId: messages.roomId,
-      userId: messages.userId,
-      content: messages.content,
-      status: messages.status,
-      burnAfterRead: messages.burnAfterRead,
-      createdAt: messages.createdAt,
-      expiresAt: messages.expiresAt,
-      readAt: messages.readAt,
-      chatName: users.chatName,
-    })
-    .from(messages)
-    .leftJoin(users, eq(messages.userId, users.id))
-    .where(and(...conditions))
-    .orderBy(desc(messages.createdAt), desc(messages.id))
-    .limit(limit + 1);
-
-  const hasMore = rows.length > limit;
-  const pageRows = hasMore ? rows.slice(0, limit) : rows;
-
-  const nextCursor = hasMore
-    ? encodeCursor({
-        createdAt: pageRows[pageRows.length - 1].createdAt.toISOString(),
-        id: pageRows[pageRows.length - 1].id,
-      })
-    : null;
-
-  const result = pageRows
-    .slice()
-    .reverse()
-    .map((m) => {
-      const isOwn = m.userId === session.user.id;
-      const isMaskedBurn = m.burnAfterRead && !m.readAt && !isOwn;
-      const visible = m.status === "active" && !isMaskedBurn;
-
-      return {
-        id: m.id,
-        roomId: m.roomId,
-        userId: m.userId,
-        status: m.status,
-        burnAfterRead: m.burnAfterRead,
-        createdAt: m.createdAt,
-        expiresAt: m.expiresAt,
-        readAt: m.readAt,
-        chatName: m.chatName,
-        content: visible ? m.content : null,
-        masked: m.status === "active" && isMaskedBurn,
-      };
-    });
-  return NextResponse.json({ messages: result, nextCursor });
-}
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ roomId: string }> },
-) {
-  const { roomId } = await params;
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!(await requireMembership(session.user.id, roomId))) {
-    return NextResponse.json(
-      { error: "Not a member of this room" },
-      { status: 403 },
-    );
-  }
-
-  const rate = checkMessageRateLimit(session.user.id, roomId);
-  if (!rate.allowed) {
-    return NextResponse.json(
-      { error: "Too many messages - slow down man!" },
-      {
-        status: 429,
-        headers: { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000)) },
-      },
-    );
-  }
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-  const parsed = createMsgSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", issues: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const { clientMessageId, content, ttlSeconds, burnAfterRead } = parsed.data;
-  const expiresAt = computeExpiresAt(ttlSeconds);
-
-  const [inserted] = await db
-    .insert(messages)
-    .values({
-      id: clientMessageId,
-      roomId,
-      userId: session.user.id,
-      content,
-      burnAfterRead,
-      expiresAt,
-    })
-    .onConflictDoNothing({ target: messages.id })
-    .returning();
-  let message = inserted;
-  let wasDuplicate = false;
-
-  if (!message) {
-    wasDuplicate = true;
-    const [existing] = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, clientMessageId))
-      .limit(1);
-    if (!existing) {
+    if (!(await requireMembership(session.user.id, roomId))) {
       return NextResponse.json(
-        { error: "Could not create message" },
-        { status: 500 },
+        { error: "Not a member of this room" },
+        { status: 403 },
       );
     }
-    message = existing;
-  }
-  if (!wasDuplicate) {
-    const io = getIO();
-    console.log(
-      "[messages:create] getIO() returned:",
-      io ? "a live Server instance" : "null",
-    );
-    if (io) {
-      io.to(roomId).emit("message:new", {
-        id: message.id,
+
+    const url = new URL(req.url);
+    const limitParam = Number(url.searchParams.get("limit"));
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(Math.max(Math.trunc(limitParam), 1), MAX_PAGE_SIZE)
+      : DEFAULT_PAGE_SIZE;
+
+    const cursorParam = url.searchParams.get("cursor");
+    let cursor: Cursor | null = null;
+    if (cursorParam) {
+      cursor = decodeCursor(cursorParam);
+      if (!cursor) {
+        return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+      }
+    }
+
+    const conditions = [eq(messages.roomId, roomId)];
+    if (cursor) {
+      const cursorDate = new Date(cursor.createdAt);
+      conditions.push(
+        or(
+          lt(messages.createdAt, cursorDate),
+          and(eq(messages.createdAt, cursorDate), lt(messages.id, cursor.id)),
+        )!,
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: messages.id,
+        roomId: messages.roomId,
+        userId: messages.userId,
+        content: messages.content,
+        status: messages.status,
+        burnAfterRead: messages.burnAfterRead,
+        createdAt: messages.createdAt,
+        expiresAt: messages.expiresAt,
+        readAt: messages.readAt,
+        chatName: users.chatName,
+      })
+      .from(messages)
+      .leftJoin(users, eq(messages.userId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+    const nextCursor = hasMore
+      ? encodeCursor({
+          createdAt: pageRows[pageRows.length - 1].createdAt.toISOString(),
+          id: pageRows[pageRows.length - 1].id,
+        })
+      : null;
+
+    const result = pageRows
+      .slice()
+      .reverse()
+      .map((m) => {
+        const isOwn = m.userId === session.user.id;
+        const isMaskedBurn = m.burnAfterRead && !m.readAt && !isOwn;
+        const visible = m.status === "active" && !isMaskedBurn;
+
+        return {
+          id: m.id,
+          roomId: m.roomId,
+          userId: m.userId,
+          status: m.status,
+          burnAfterRead: m.burnAfterRead,
+          createdAt: m.createdAt,
+          expiresAt: m.expiresAt,
+          readAt: m.readAt,
+          chatName: m.chatName,
+          content: visible ? m.content : null,
+          masked: m.status === "active" && isMaskedBurn,
+        };
+      });
+    return NextResponse.json({ messages: result, nextCursor });
+  },
+);
+
+export const POST = withLogging<{ roomId: string }>(
+  "messages.create",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ roomId: string }> },
+  ) => {
+    if (!isSameOrigin(req)) {
+      return NextResponse.json(
+        { error: "Invalid request origin" },
+        { status: 403 },
+      );
+    }
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json(
+        { error: "Request body too large" },
+        { status: 413 },
+      );
+    }
+
+    const { roomId } = await params;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!(await requireMembership(session.user.id, roomId))) {
+      return NextResponse.json(
+        { error: "Not a member of this room" },
+        { status: 403 },
+      );
+    }
+
+    const rate = checkMessageRateLimit(session.user.id, roomId);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many messages - slow down man!" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000)),
+          },
+        },
+      );
+    }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const parsed = createMsgSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", issues: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const { clientMessageId, content, ttlSeconds, burnAfterRead } = parsed.data;
+    const expiresAt = computeExpiresAt(ttlSeconds);
+
+    const [inserted] = await db
+      .insert(messages)
+      .values({
+        id: clientMessageId,
         roomId,
         userId: session.user.id,
-        chatName: session.user.chatName,
-        content: message.content,
-        burnAfterRead: message.burnAfterRead,
-        status: message.status,
-        createdAt: message.createdAt,
-        expiresAt: message.expiresAt,
-      });
-      console.log("[messages:create] emitted message:new to room", roomId);
-    } else {
-      console.warn(
-        "[messages:create] SKIPPED emit — io was null, live update will not happen for this message",
-      );
-    }
-  }
+        content,
+        burnAfterRead,
+        expiresAt,
+      })
+      .onConflictDoNothing({ target: messages.id })
+      .returning();
+    let message = inserted;
+    let wasDuplicate = false;
 
-  return NextResponse.json(
-    { message, wasDuplicate },
-    { status: wasDuplicate ? 200 : 201 },
-  );
-}
+    if (!message) {
+      wasDuplicate = true;
+      const [existing] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, clientMessageId))
+        .limit(1);
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Could not create message" },
+          { status: 500 },
+        );
+      }
+      message = existing;
+    }
+    if (!wasDuplicate) {
+      const io = getIO();
+      console.log(
+        "[messages:create] getIO() returned:",
+        io ? "a live Server instance" : "null",
+      );
+      if (io) {
+        io.to(roomId).emit("message:new", {
+          id: message.id,
+          roomId,
+          userId: session.user.id,
+          chatName: session.user.chatName,
+          content: message.content,
+          burnAfterRead: message.burnAfterRead,
+          status: message.status,
+          createdAt: message.createdAt,
+          expiresAt: message.expiresAt,
+        });
+        console.log("[messages:create] emitted message:new to room", roomId);
+      } else {
+        console.warn(
+          "[messages:create] SKIPPED emit — io was null, live update will not happen for this message",
+        );
+      }
+    }
+
+    return NextResponse.json(
+      { message, wasDuplicate },
+      { status: wasDuplicate ? 200 : 201 },
+    );
+  },
+);

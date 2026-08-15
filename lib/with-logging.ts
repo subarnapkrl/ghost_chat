@@ -1,14 +1,14 @@
 import { getCorrelationId, log } from "./logger";
 
-type RouteHandler = (
+type RouteHandler<T = Record<string, string>> = (
   req: Request,
-  ctx: { params: Record<string, string> },
+  ctx: { params: Promise<T> },
 ) => Promise<Response>;
 
-export function withLogging(
+export function withLogging<T = Record<string, string>>(
   routeName: string,
-  handler: RouteHandler,
-): RouteHandler {
+  handler: RouteHandler<T>,
+): RouteHandler<T> {
   return async (req, ctx) => {
     const correlationId = getCorrelationId(req);
     const start = Date.now();

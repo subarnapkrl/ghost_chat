@@ -123,6 +123,13 @@ app.prepare().then(() => {
   });
   httpServer.listen(port, () => {
     log("server:ready", { port });
+    log("server:env-check", {
+      NEXT_PUBLIC_APP_URL:
+        process.env.NEXT_PUBLIC_APP_URL ||
+        "(empty — this will break CSRF/CORS checks)",
+      AUTH_SECRET: process.env.AUTH_SECRET ? "(set)" : "(MISSING)",
+      DATABASE_URL: process.env.DATABASE_URL ? "(set)" : "(MISSING)",
+    });
   });
   setIO(io);
   console.log(

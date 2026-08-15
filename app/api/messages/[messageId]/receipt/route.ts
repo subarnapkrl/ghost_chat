@@ -9,9 +9,12 @@ import { getIO } from "../../../../../lib/socket-server";
 
 export const runtime = "nodejs";
 
-export const POST = withLogging(
+export const POST = withLogging<{ messageId: string }>(
   "messages.receipt",
-  async (req: NextRequest, { params }: { params: { messageId: string } }) => {
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ messageId: string }> },
+  ) => {
     if (!isSameOrigin(req)) {
       return NextResponse.json(
         { error: "Invalid request origin" },
@@ -24,7 +27,7 @@ export const POST = withLogging(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { messageId } = params;
+    const { messageId } = await params;
 
     const [message] = await db
       .select()
@@ -52,13 +55,10 @@ export const POST = withLogging(
       );
     }
 
-    // Sender viewing their own message doesn't produce a receipt — you
-    // don't get a "read" tick from yourself.
     if (message.userId === session.user.id) {
       return NextResponse.json({ ok: true, isSender: true });
     }
 
-    // Already in readBy — idempotent no-op, don't re-broadcast.
     if (message.readBy.includes(session.user.id)) {
       return NextResponse.json({
         ok: true,

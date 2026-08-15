@@ -37,6 +37,7 @@ export default async function RoomPage({
       roomId={room.id}
       roomName={room.name}
       chatName={session.user.chatName}
+      currentUserId={session.user.id}
     />
   );
 }
