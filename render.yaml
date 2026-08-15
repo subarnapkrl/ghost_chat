@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ghostchat
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: BURN_AFTER_READ_SECONDS
+        value: "10"
